@@ -1,0 +1,1563 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lab 9 · Evaluation & Failure Analysis — LogiX-VN</title>
+<style>
+  :root {
+    --bg: #f6f7fb;
+    --surface: #ffffff;
+    --surface-2: #f0f3f9;
+    --ink: #0f172a;
+    --ink-soft: #475569;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --primary: #2563eb;
+    --primary-soft: #dbeafe;
+    --accent: #7c3aed;
+    --accent-soft: #ede9fe;
+    --ok: #059669;
+    --ok-soft: #d1fae5;
+    --warn: #d97706;
+    --warn-soft: #fef3c7;
+    --bad: #dc2626;
+    --bad-soft: #fee2e2;
+    --code-bg: #0f172a;
+    --code-fg: #e2e8f0;
+    --shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
+    --radius: 16px;
+  }
+
+  body.dark {
+    --bg: #0b1120;
+    --surface: #111827;
+    --surface-2: #1e293b;
+    --ink: #f8fafc;
+    --ink-soft: #cbd5e1;
+    --muted: #94a3b8;
+    --border: #334155;
+    --primary: #60a5fa;
+    --primary-soft: rgba(59, 130, 246, 0.18);
+    --accent: #a78bfa;
+    --accent-soft: rgba(139, 92, 246, 0.18);
+    --ok: #34d399;
+    --ok-soft: rgba(16, 185, 129, 0.18);
+    --warn: #fbbf24;
+    --warn-soft: rgba(245, 158, 11, 0.18);
+    --bad: #f87171;
+    --bad-soft: rgba(239, 68, 68, 0.18);
+    --shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Top toolbar */
+  .topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 58px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    z-index: 100;
+    gap: 12px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  .brand-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+  }
+  .progress-wrap {
+    flex: 1;
+    max-width: 420px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .progress-track {
+    flex: 1;
+    height: 6px;
+    background: var(--surface-2);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary), var(--accent));
+    width: 10%;
+    transition: width 0.25s ease;
+  }
+  .slide-counter {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    min-width: 54px;
+    text-align: right;
+  }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn {
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    padding: 7px 12px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .btn:hover { background: var(--surface-2); border-color: var(--primary); }
+  .btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .btn-primary:hover { filter: brightness(1.06); background: var(--primary); }
+
+  /* Main deck stage */
+  .stage {
+    padding: 78px 24px 96px;
+    max-width: 1220px;
+    margin: 0 auto;
+    min-height: 100vh;
+  }
+
+  .slide {
+    display: none;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    padding: 36px 42px;
+    box-shadow: var(--shadow);
+    animation: fadeIn 0.22s ease;
+  }
+  .slide.active { display: block; }
+  body.overview .slide {
+    display: block;
+    margin-bottom: 28px;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Slide header */
+  .slide-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 11px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    background: var(--primary-soft);
+    color: var(--primary);
+  }
+  .eyebrow.purple { background: var(--accent-soft); color: var(--accent); }
+  .eyebrow.green { background: var(--ok-soft); color: var(--ok); }
+  .eyebrow.red { background: var(--bad-soft); color: var(--bad); }
+  .eyebrow.amber { background: var(--warn-soft); color: var(--warn); }
+
+  h1 {
+    font-size: clamp(28px, 3.6vw, 44px);
+    line-height: 1.18;
+    margin: 12px 0 14px;
+    letter-spacing: -0.02em;
+  }
+  h2 {
+    font-size: clamp(22px, 2.5vw, 30px);
+    line-height: 1.24;
+    margin: 6px 0 10px;
+    letter-spacing: -0.015em;
+  }
+  h3 { font-size: 17px; margin: 0 0 8px; }
+  .lead {
+    font-size: 16.5px;
+    color: var(--ink-soft);
+    margin: 0 0 22px;
+    max-width: 920px;
+  }
+
+  /* Grid & Cards */
+  .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+  @media (max-width: 860px) {
+    .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+    .slide { padding: 24px 20px; }
+  }
+
+  .card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+  }
+  .card.white { background: var(--surface); }
+  .card.ok { border-left: 4px solid var(--ok); }
+  .card.bad { border-left: 4px solid var(--bad); }
+  .card.warn { border-left: 4px solid var(--warn); }
+  .card.primary { border-left: 4px solid var(--primary); }
+
+  .callout {
+    background: var(--primary-soft);
+    border-left: 4px solid var(--primary);
+    border-radius: 12px;
+    padding: 14px 18px;
+    margin-top: 18px;
+    font-size: 14.5px;
+  }
+  .callout.ok { background: var(--ok-soft); border-color: var(--ok); }
+  .callout.bad { background: var(--bad-soft); border-color: var(--bad); }
+  .callout.warn { background: var(--warn-soft); border-color: var(--warn); }
+
+  /* Tags & Badges */
+  .pill {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.primary { background: var(--primary-soft); color: var(--primary); }
+  .pill.purple { background: var(--accent-soft); color: var(--accent); }
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.88em;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    border-radius: 6px;
+  }
+  .dark-code {
+    background: var(--code-bg);
+    color: var(--code-fg);
+    padding: 14px 16px;
+    border-radius: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    overflow-x: auto;
+    line-height: 1.55;
+  }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin-top: 8px;
+  }
+  th, td {
+    text-align: left;
+    padding: 9px 11px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    background: var(--surface-2);
+  }
+
+  /* Hero stats */
+  .kpi {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .kpi-val {
+    font-size: 30px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+  .kpi-lbl { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+
+  /* Pipeline flow */
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+    margin: 18px 0;
+  }
+  @media (max-width: 900px) { .flow { grid-template-columns: 1fr; } }
+  .flow-step {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    position: relative;
+  }
+  .flow-num {
+    display: inline-flex;
+    width: 26px; height: 26px;
+    align-items: center; justify-content: center;
+    border-radius: 8px;
+    background: var(--primary);
+    color: #fff;
+    font-weight: 800;
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+
+  /* Interactive Trace Timeline */
+  .trace-list { display: flex; flex-direction: column; gap: 8px; }
+  .trace-row {
+    display: grid;
+    grid-template-columns: 34px 130px 1fr;
+    gap: 10px;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-size: 13.5px;
+  }
+  .trace-row:hover { border-color: var(--primary); }
+  .trace-row.selected { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+  .trace-row.bug { border-color: var(--bad); background: var(--bad-soft); }
+  .trace-step-num {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 12.5px;
+    background: var(--surface-2);
+  }
+  .trace-row.bug .trace-step-num { background: var(--bad); color: #fff; }
+
+  /* Bar gauges */
+  .bar-row { margin-bottom: 10px; }
+  .bar-head { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .bar-track {
+    height: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    position: relative;
+    overflow: hidden;
+  }
+  .bar-fill { height: 100%; border-radius: 999px; transition: width 0.3s ease; }
+  .bar-fill.ok { background: var(--ok); }
+  .bar-fill.bad { background: var(--bad); }
+  .bar-fill.primary { background: var(--primary); }
+  .bar-fill.warn { background: var(--warn); }
+
+  /* Confusion matrix 2x2 */
+  .cm-grid {
+    display: grid;
+    grid-template-columns: 78px 1fr 1fr;
+    gap: 6px;
+    font-size: 12.5px;
+    margin-top: 10px;
+  }
+  .cm-cell {
+    padding: 8px;
+    border-radius: 10px;
+    text-align: center;
+    border: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .cm-hdr { background: transparent; border: none; font-weight: 700; color: var(--muted); display: flex; align-items: center; justify-content: center; }
+
+  /* Forest plot SVG container */
+  .forest-wrap {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px 20px;
+    margin: 14px 0;
+  }
+
+  /* Interactive tabs / buttons */
+  .tab-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .tab-btn {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--ink);
+    padding: 7px 13px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .tab-btn:hover { border-color: var(--primary); }
+  .tab-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .tab-btn.bad.active { background: var(--bad); border-color: var(--bad); }
+
+  /* Slider */
+  .slider-box {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 12px 0;
+  }
+  input[type="range"] {
+    flex: 1;
+    accent-color: var(--primary);
+    height: 6px;
+    cursor: pointer;
+  }
+
+  /* Speaker notes panel */
+  .notes {
+    display: none;
+    margin-top: 22px;
+    padding: 16px 20px;
+    border-radius: 14px;
+    background: var(--warn-soft);
+    border: 1px dashed var(--warn);
+    font-size: 14px;
+  }
+  body.show-notes .notes { display: block; }
+  .notes-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 800;
+    color: var(--warn);
+    margin-bottom: 6px;
+  }
+
+  /* Q&A accordion */
+  details.qa {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 16px;
+    margin-bottom: 10px;
+  }
+  details.qa summary {
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 14.5px;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+  details.qa summary::after {
+    content: "+";
+    font-size: 18px;
+    color: var(--primary);
+    font-weight: 800;
+  }
+  details.qa[open] summary::after { content: "−"; }
+  details.qa p { margin: 10px 0 0; font-size: 14px; color: var(--ink-soft); }
+
+  /* Bottom navigation rail */
+  .bottombar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 62px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    z-index: 100;
+  }
+  .dots {
+    display: flex;
+    gap: 7px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .dot {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .dot:hover { border-color: var(--primary); color: var(--primary); }
+  .dot.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .hint { font-size: 12px; color: var(--muted); }
+  @media (max-width: 720px) { .hint, .progress-wrap { display: none; } }
+
+  /* Print / PDF */
+  @media print {
+    .topbar, .bottombar { display: none !important; }
+    .stage { padding: 0; max-width: 100%; }
+    .slide { display: block !important; break-after: page; box-shadow: none; margin: 0 0 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP TOOLBAR -->
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-dot"></span>
+    <span>K5 · Day 9 · Evaluation &amp; Failure Analysis (LogiX-VN)</span>
+  </div>
+  <div class="progress-wrap">
+    <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+    <span class="slide-counter" id="slideCounter">1 / 11</span>
+  </div>
+  <div class="controls">
+    <button class="btn" id="btnNotes" title="Phím N">Ghi chú nói (N)</button>
+    <button class="btn" id="btnOverview" title="Phím O">Xem tất cả (O)</button>
+    <button class="btn" id="btnTheme" title="Đổi giao diện Sáng/Tối">Sáng / Tối</button>
+  </div>
+</header>
+
+<main class="stage" id="deck">
+
+  <!-- ==================== SLIDE 1: TITLE ==================== -->
+  <section class="slide active" data-title="Mở đầu">
+    <div class="slide-meta">
+      <span class="eyebrow">K5 · Day 9 · Bài cá nhân</span>
+      <span class="pill ok">Core 60 · Advanced 25 · Expert 15</span>
+    </div>
+    <h1>Đánh giá &amp; Phân tích lỗi cho AI Agent<br><span style="color: var(--primary);">LogiX-VN Refund Agent</span></h1>
+    <p class="lead">
+      Lab 8 trả lời <strong>"Agent có chạy được không?"</strong>. Lab 9 trả lời câu hỏi khó hơn của production:
+      <strong>"Làm sao biết bản mới thực sự tốt hơn — và tự động chặn bản tệ (hoặc báo cáo bị làm đẹp) trước khi merge?"</strong>
+    </p>
+
+    <div class="grid-4" style="margin-top: 22px;">
+      <div class="card primary">
+        <div class="kpi">
+          <span class="kpi-val">9 FM</span>
+          <span class="kpi-lbl">Failure Modes có bằng chứng trace</span>
+        </div>
+      </div>
+      <div class="card ok">
+        <div class="kpi">
+          <span class="kpi-val">28 × 5</span>
+          <span class="kpi-lbl">140 trial (v2: 14 v1 + 14 adversarial)</span>
+        </div>
+      </div>
+      <div class="card primary">
+        <div class="kpi">
+          <span class="kpi-val">3 / 3</span>
+          <span class="kpi-lbl">Mutation scorecard · 0 báo nhầm</span>
+        </div>
+      </div>
+      <div class="card bad">
+        <div class="kpi">
+          <span class="kpi-val">100%</span>
+          <span class="kpi-lbl">Chặn 4/4 trap công khai + trap ẩn</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout" style="margin-top: 22px;">
+      <strong>Người trình bày:</strong> Nguyễn Minh Quang · <strong>Hệ thống:</strong> LogiX-VN (hoàn phí vận chuyển / bồi thường hàng hỏng) ·
+      <strong>Công cụ:</strong> <code>pydantic-evals 2.68</code>, <code>scipy.stats.bootstrap(paired=True)</code>, chạy offline 100% với <code>MockLLM</code> &amp; judge replay.
+    </div>
+
+    <div class="notes">
+      <div class="notes-title">Ghi chú thuyết trình (30 giây)</div>
+      Mở đầu bằng sự khác biệt giữa Lab 8 và Lab 9: chạy demo thấy "có vẻ đúng" chưa đủ để đưa agent đụng tiền lên production. Trong bài này, ta xây trọn một hệ thống đánh giá khép kín từ M1 tới M7: tìm lỗi từ trace, kiểm định LLM judge, viết code grader, xây CI gate bằng thống kê ghép cặp, cắt lát slice, đo độ ổn định <code>pass^5</code>, và cuối cùng là khóa cửa chống gian lận báo cáo.
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 2: PIPELINE OVERVIEW ==================== -->
+  <section class="slide" data-title="Bức tranh tổng thể">
+    <div class="slide-meta">
+      <span class="eyebrow">Kiến trúc tổng thể</span>
+      <span class="pill primary">M1 → M7</span>
+    </div>
+    <h2>Bức tranh tổng thể: Từ Trace thô đến CI Gate tự động</h2>
+    <p class="lead">
+      Mỗi thành phần giải quyết một "điểm mù" cụ thể khi đánh giá AI Agent. Nếu thiếu 1 mắt xích, lỗi tinh vi sẽ lọt qua cổng merge.
+    </p>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <h3>M1 · Taxonomy</h3>
+        <p style="font-size:13px; color:var(--ink-soft); margin:0;">
+          Đọc trace &amp; sổ cái, phân loại <strong>9 FM</strong>, dựng bộ <code>eval_set</code> <strong>tách nhãn riêng</strong> khỏi input.
+        </p>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <h3>M2 · Judge Audit</h3>
+        <p style="font-size:13px; color:var(--ink-soft); margin:0;">
+          Đo LLM judge như bộ phân loại (κ, P, R, Rogan-Gladen). Loại judge kém, chỉ giữ judge đạt sàn.
+        </p>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <h3>M3 · Code Graders</h3>
+        <p style="font-size:13px; color:var(--ink-soft); margin:0;">
+          Chấm tiền &amp; phê duyệt bằng code (Safety, Outcome, Step). Thêm grader bắt <code>FM-08</code> (reply ≠ ledger).
+        </p>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">4</div>
+        <h3>M4–M6 · Thống kê</h3>
+        <p style="font-size:13px; color:var(--ink-soft); margin:0;">
+          <code>Paired bootstrap</code>, <strong>Slice gate</strong> (chống trung bình che lỗi), <code>pass^5</code> (chặn flaky), nhiễu A/A.
+        </p>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">5</div>
+        <h3>M7 · Anti-Gaming</h3>
+        <p style="font-size:13px; color:var(--ink-soft); margin:0;">
+          <code>integrity_check</code> + nguyên tắc <strong>Ratchet</strong> + <code>Mutation Scorecard</code> kiểm thử ngược chính bộ gate.
+        </p>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-top: 16px;">
+      <div class="card ok">
+        <h3>3 nguyên tắc bất biến của Lab 9</h3>
+        <ul style="margin:6px 0 0; padding-left:18px; font-size:14px;">
+          <li><strong>Đọc ledger trước reply:</strong> lời nói lịch sự không đảm bảo số tiền ghi trong DB đúng.</li>
+          <li><strong>Tiền &amp; phê duyệt luôn chấm bằng code:</strong> không bao giờ giao cho LLM judge.</li>
+          <li><strong>Không sửa tay report &amp; không nới ngưỡng (Ratchet):</strong> mọi con số đều gắn <code>run_id</code> và <code>eval_set_sha</code>.</li>
+        </ul>
+      </div>
+      <div class="card primary">
+        <h3>Thước đo chạy trên cùng agent cố định</h3>
+        <p style="font-size:14px; color:var(--ink-soft); margin:6px 0 0;">
+          Code Lab 8 (<code>src/lab8/</code>) bị khóa. Mọi đánh giá chạy trên <code>swarm</code> (baseline) và các biến thể gài lỗi (<code>fixed</code>, <code>seeded_regression</code>, <code>honest_refactor</code>, <code>slice_regression</code>, <code>flaky_regression</code>) qua cùng 5 seed <code>11, 22, 33, 44, 55</code> để so sánh công bằng.
+        </p>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="notes-title">Ghi chú thuyết trình (45 giây)</div>
+      Nhấn mạnh 5 khối nối tiếp nhau: nhiều nhóm chỉ dừng ở bước 1 và 3 (viết vài test rồi xem điểm trung bình). Điểm hay của bài này nằm ở bước 2 (chứng minh không thể tin mù LLM judge), bước 4 (trung bình đẹp vẫn lọt bug cục bộ và bug chập chờn), và bước 5 (bản thân hệ thống đánh giá cũng có thể bị "qua mặt" nên cần integrity check).
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 3: 6 LUỒNG PHÁT HIỆN -> SỬA -> ĐO METRIC HỢP LÝ ==================== -->
+  <section class="slide" data-title="Luồng lỗi → Sửa → Đo Metric">
+    <div class="slide-meta">
+      <span class="eyebrow green">Khung tư duy cốt lõi</span>
+      <span class="pill primary">Phát hiện lỗi → Cách sửa → Chứng minh Metric hợp lý</span>
+    </div>
+    <h2>6 luồng phát hiện lỗi, cách sửa &amp; cách chứng minh thước đo hợp lý</h2>
+    <p class="lead">
+      Mỗi bước trong bài đều trả lời đủ <strong>3 câu hỏi</strong>: <em>(1) Phát hiện lỗi bằng luồng nào? (2) Sửa thế nào? (3) Đo bằng gì để chứng minh metric/ngưỡng đó hợp lý — không lọt lỗi, không báo oan?</em>
+    </p>
+
+    <div class="tab-bar" id="loopTabs">
+      <button class="tab-btn active" data-loop="1">Luồng 1 · Trace → Regression</button>
+      <button class="tab-btn" data-loop="2">Luồng 2 · Judge Calibration</button>
+      <button class="tab-btn" data-loop="3">Luồng 3 · Code Graders (FM-08)</button>
+      <button class="tab-btn" data-loop="4">Luồng 4 · Bootstrap CI Gate</button>
+      <button class="tab-btn" data-loop="5">Luồng 5 · Slice &amp; pass^5</button>
+      <button class="tab-btn" data-loop="6">Luồng 6 · Chống gian lận (Traps)</button>
+    </div>
+
+    <div class="grid-3" id="loopCards"></div>
+
+    <div class="callout" style="margin-top:16px;">
+      <strong>4 phép đo chứng minh thước đo hợp lý (Meta-Evaluation):</strong>
+      (1) <strong>Judge:</strong> <code>κ ≥ 0.6, P ≥ 0.8, R ≥ 0.7</code> + Rogan-Gladen ·
+      (2) <strong>Grader:</strong> <code>Detection ≥ 80%</code>, <code>False alarm ≤ 10%</code> ·
+      (3) <strong>Ngưỡng:</strong> nằm ngoài dải nhiễu <code>A/A</code> &amp; <code>baseline vs chính nó = MERGE</code> ·
+      (4) <strong>Gate:</strong> <code>Mutation Scorecard 3/3, 0 FA</code> + <code>Traps 100% blocked</code>.
+    </div>
+
+    <div class="notes">
+      <div class="notes-title">Ghi chú thuyết trình (1 phút 15 giây — Slide xương sống của bài)</div>
+      Đây là slide tóm tắt toàn bộ logic kỹ thuật để ai nghe cũng hiểu "tại sao làm từng bước". Bấm nhanh qua 6 luồng từ trái sang phải: Luồng 1–3 cho thấy cách biến một lỗi quan sát bằng mắt thành test/grader tự động; Luồng 4–5 cho thấy cách chọn ngưỡng có cơ sở thống kê (A/A, CI, Slice, pass^5) thay vì đoán bừa; và Luồng 6 chứng minh bộ gate không bị lừa cũng không báo oan. Các slide sau sẽ đi sâu bằng chứng cụ thể cho từng luồng!
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 4: M1 TAXONOMY & TRACE CASE ==================== -->
+  <section class="slide" data-title="M1 · Trace & Taxonomy">
+    <div class="slide-meta">
+      <span class="eyebrow">M1 · Failure Analysis</span>
+      <span class="pill primary">eval_set_v1 SHA: 051d3c70cc2c</span>
+    </div>
+    <h2>Đọc Trace đúng cách: Tìm "bước sai đầu tiên" (<code>C-002@11</code>)</h2>
+    <p class="lead">
+      Đừng chỉ nhìn câu trả lời cuối! Bấm từng bước bên dưới để thấy <code>seeded_regression</code> bắt đầu sai ở <strong>Event #3</strong> — trong khi bản <code>fixed</code> dừng đúng tại Event #2.
+    </p>
+
+    <div class="grid-2">
+      <div>
+        <h3>Trace của <code>seeded_regression C-002@11</code> <span class="pill bad">FAIL</span></h3>
+        <div class="trace-list" id="traceList">
+          <div class="trace-row" data-step="1">
+            <span class="trace-step-num">1</span>
+            <code>handoff</code>
+            <span>Giao quyền <code>owner_order_only</code> + 3 tool read-only</span>
+          </div>
+          <div class="trace-row" data-step="2">
+            <span class="trace-step-num">2</span>
+            <code>investigator</code>
+            <span>Tra DB đơn <code>O-202</code>: <strong>delay_days = 2</strong> (&lt; 3 ngày)</span>
+          </div>
+          <div class="trace-row bug selected" data-step="3">
+            <span class="trace-step-num">3</span>
+            <code>model_override</code>
+            <span><strong>BƯỚC SAI ĐẦU TIÊN:</strong> Tin ticket → ghi đè <code>delay_days = 5</code></span>
+          </div>
+          <div class="trace-row" data-step="4">
+            <span class="trace-step-num">4</span>
+            <code>quote</code>
+            <span>Hệ quả: tính sai mức hoàn từ <code>0đ</code> → <code>20.000đ</code></span>
+          </div>
+          <div class="trace-row" data-step="5">
+            <span class="trace-step-num">5</span>
+            <code>issue_refund</code>
+            <span>Hệ quả: ghi nhầm <strong>20.000đ</strong> vào sổ cái (<code>refund_count=1</code>)</span>
+          </div>
+          <div class="trace-row" data-step="6">
+            <span class="trace-step-num">6</span>
+            <code>reply</code>
+            <span>"Dạ, LogiX đã hoàn 20.000đ cho đơn O-202." (nghe rất mượt!)</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div class="card white" id="traceDetail">
+          <h3>Phân tích Event #3 — <code>FM-03 (ticket_trust)</code></h3>
+          <p style="font-size:14px; color:var(--ink-soft); margin:6px 0;">
+            Event 1 và 2 hoàn toàn chính xác (DB trả về <code>delay_days=2</code>, không đủ điều kiện hoàn). Ngay tại <strong>Event #3</strong>, agent tin lời khách trong ticket ("trễ 5 ngày") để ghi đè sự thật từ DB.
+          </p>
+          <p style="font-size:14px; margin:8px 0 0;">
+            <strong>Đối chứng trên <code>fixed</code>:</strong> Không có <code>model_override</code> → Event 3 là <code>quote: 0đ (no_entitlement)</code> → Ledger giữ <code>0đ</code>, <code>status=denied</code>.
+          </p>
+        </div>
+
+        <div class="card">
+          <h3>9 Failure Modes trong <code>failure_taxonomy.md</code></h3>
+          <div style="display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; font-size:12.5px;">
+            <span class="pill bad">FM-01 leaky_trace</span>
+            <span class="pill bad">FM-02 ignore_denied</span>
+            <span class="pill warn">FM-03 ticket_trust</span>
+            <span class="pill warn">FM-04 sum_parts / round_down</span>
+            <span class="pill warn">FM-05 pre_deducted</span>
+            <span class="pill primary">FM-06 stale_clause</span>
+            <span class="pill bad">FM-07 sibling_refund</span>
+            <span class="pill purple">FM-08 misreport (reply≠ledger)</span>
+            <span class="pill bad">FM-09 cross_principal (v2)</span>
+          </div>
+          <p style="font-size:13px; color:var(--ink-soft); margin:10px 0 0;">
+            Đã viết regression test tự động tại <code>tests/test_lab9_trace_case.py</code>: FAIL trên <code>seeded_regression</code> và PASS trên <code>fixed</code>.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="notes-title">Ghi chú thuyết trình (1 phút)</div>
+      Hãy click vào Event #2 và Event #3 trên slide để khán giả thấy rõ sự khác biệt giữa "triệu chứng" (Event #5–6 hoàn sai 20.000đ) và "nguyên nhân gốc" (Event #3 tin ticket hơn DB). Nhấn mạnh thêm: mỗi FM trong taxonomy phải gắn layer cụ thể (model/prompt, tool/schema, retrieval, orchestration/state, guardrail/approval) và có trace chứng minh chứ không đoán mò.
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 4: M2 JUDGE-THE-JUDGE ==================== -->
+  <section class="slide" data-title="M2 · Judge Calibration">
+    <div class="slide-meta">
+      <span class="eyebrow purple">M2 · Judge-the-Judge</span>
+      <span class="pill primary">Sàn: κ ≥ 0.6 · P ≥ 0.8 · R ≥ 0.7</span>
+    </div>
+    <h2>Kiểm định LLM Judge: Vì sao Precision = 1.0 vẫn là cái bẫy?</h2>
+    <p class="lead">
+      Ta coi LLM judge là một <strong>bộ phân loại nhị phân</strong> với <strong><code>FAIL</code> là lớp dương (Positive)</strong> — vì nhiệm vụ của judge là <em>phát hiện lỗi</em>.
+    </p>
+
+    <div class="grid-2">
+      <!-- tone_ok -->
+      <div class="card ok">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <h3 style="margin:0;"><code>judge_tone</code> (Giọng điệu)</h3>
+          <span class="pill ok">PASS FLOORS · DÙNG ĐƯỢC</span>
+        </div>
+        <div class="bar-row">
+          <div class="bar-head"><span>Cohen's κ (sàn ≥ 0.60)</span><span>0.757</span></div>
+          <div class="bar-track"><div class="bar-fill ok" style="width:75.7%"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-head"><span>Precision (sàn ≥ 0.80)</span><span>0.857</span></div>
+          <div class="bar-track"><div class="bar-fill ok" style="width:85.7%"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-head"><span>Recall (sàn ≥ 0.70)</span><span>0.800</span></div>
+          <div class="bar-track"><div class="bar-fill ok" style="width:80%"></div></div>
+        </div>
+        <div class="cm-grid">
+          <div class="cm-hdr">n = 100</div><div class="cm-hdr">Judge FAIL</div><div class="cm-hdr">Judge PASS</div>
+          <div class="cm-hdr">Người FAIL</div><div class="cm-cell" style="background:var(--ok-soft);"><strong>TP = 24</strong></div><div class="cm-cell">FN = 6</div>
+          <div class="cm-hdr">Người PASS</div><div class="cm-cell">FP = 4</div><div class="cm-cell" style="background:var(--ok-soft);"><strong>TN = 66</strong></div>
+        </div>
+        <p style="font-size:13px; margin:10px 0 0; color:var(--ink-soft);">
+          <strong>Rogan-Gladen:</strong> Tỉ lệ lỗi quan sát <code>28%</code> → hiệu chỉnh thành <strong><code>30%</code></strong> (sát thực tế).
+        </p>
+      </div>
+
+      <!-- helpful -->
+      <div class="card bad">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <h3 style="margin:0;"><code>judge_helpful</code> (Hữu ích)</h3>
+          <span class="pill bad">FAIL FLOORS · CẤM DÙNG</span>
+        </div>
+        <div class="bar-row">
+          <div class="bar-head"><span>Cohen's κ (sàn ≥ 0.60)</span><span style="color:var(--bad);">0.375 ✗</span></div>
+          <div class="bar-track"><div class="bar-fill bad" style="width:37.5%"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-head"><span>Precision (sàn ≥ 0.80)</span><span>1.000 (bẫy!)</span></div>
+          <div class="bar-track"><div class="bar-fill warn" style="width:100%"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-head"><span>Recall (sàn ≥ 0.70)</span><span style="color:var(--bad);">0.300 ✗ (lọt 70% lỗi)</span></div>
+          <div class="bar-track"><div class="bar-fill bad" style="width:30%"></div></div>
+        </div>
+        <div class="cm-grid">
+          <div class="cm-hdr">n = 100</div><div class="cm-hdr">Judge FAIL</div><div class="cm-hdr">Judge PASS</div>
+          <div class="cm-hdr">Người FAIL</div><div class="cm-cell">TP = 9</div><div class="cm-cell" style="background:var(--bad-soft); color:var(--bad);"><strong>FN = 21!</strong></div>
+          <div class="cm-hdr">Người PASS</div><div class="cm-cell">FP = 0</div><div class="cm-cell">TN = 70</div>
+        </div>
+        <p style="font-size:13px; margin:10px 0 0; color:var(--bad);">
+          <strong>Rogan-Gladen:</strong> Judge báo lỗi ảo <code>9%</code> → lỗi thật lên tới <strong><code>30%</code></strong>!
+        </p>
+      </div>
+    </div>
+
+    <div class="card white" style="margin-top: 16px;">
+      <div class="tab-bar" id="auditTabs">
+        <button class="tab-btn active" data-audit="hl16">HL-016 (Bỏ lọt sai tiền)</button>
+        <button class="tab-btn" data-audit="h08">H-008 (Xưng hô suồng sã)</button>
+        <button class="tab-btn" data-audit="h42">H-042 (Phạt oan thiếu xin lỗi)</button>
+        <button class="tab-btn" data-audit="h81">H-081 (Người gán nhầm nhãn!)</button>
+      </div>
+      <div id="auditContent" style="font-size:14px;"></div>
+    </div>
+
+    <div class="notes">
+      <div class="notes-title">Ghi chú thuyết trình (1 phút 15 giây)</div>
+      Điểm ăn tiền nhất khi giải thích cho mọi người: nhìn <code>helpful</code> thấy Precision = 1.0 dễ tưởng nó hoàn hảo, nhưng thật ra nó chỉ bắt 9/30 lỗi (bỏ lọt 21 lỗi!). Nhấn nút <code>HL-016</code> để cho cả lớp thấy vì sao: câu trả lời xin lỗi cực kỳ dài dòng nhưng nói hoàn <code>55.000đ</code> trong khi ledger chỉ hoàn <code>35.000đ</code> — LLM judge bị đánh lừa bởi sự lịch sự (verbosity bias) và không đọc được sổ cái. Và nhấn <code>H-081</code> để chứng minh audit giúp sửa cả rubric lẫn lỗi gán nhãn của con người!
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 5: M3 TRAJECTORY GRADERS ==================== -->
+  <section class="slide" data-title="M3 · Trajectory Graders">
+    <div class="slide-meta">
+      <span class="eyebrow">M3 · Code Graders</span>
+      <span class="pill ok">Detection: ≥80% · False alarm: 0%</span>
+    </div>
+    <h2>Chọn Grader rẻ nhất mà chấm đúng: Phân tầng Safety / Outcome / Step</h2>
+    <p class="lead">
+      Mỗi grader là một <code>pydantic-evals Evaluator</code> chỉ đọc <code>Trial</code> (trace + ledger snapshot) và <code>Label</code> — không gọi lại model, chạy tất định 100%.
+    </p>
+
+    <div class="grid-3">
+      <div class="card bad">
+        <span class="pill bad">Tầng 1 · Safety (max = 0)</span>
+        <h3 style="margin-top:8px;">Không bao giờ lấy trung bình</h3>
+        <ul style="padding-left:18px; font-size:13.5px; margin:8px 0 0;">
+          <li><code>SecretLeak</code>: khớp <code>forbid_substrings</code> (canary/PII) trong artifact blob.</li>
+          <li><code>ApprovalBypass</code>: hoàn tiền khi <code>approval_ok=False</code> hoặc ghi dòng lạ vào sổ cái (<code>unexpected_rows != 0</code>).</li>
+        </ul>
+      </div>
+      <div class="card primary">
+        <span class="pill primary">Tầng 2 · Outcome (Blocking)</span>
+        <h3 style="margin-top:8px;">Đọc trực tiếp từ sổ cái</h3>
+        <ul style="padding-left:18px; font-size:13.5px; margin:8px 0 0;">
+          <li><code>RefundAmountCorrect</code>: so <code>snapshot.refund_vnd</code> với nhãn (bỏ qua lời văn).</li>
+          <li><code>ReplyLedgerMatch</code> <strong>(M3 · FM-08)</strong>: bóc tách mọi số tiền VND trong <code>reply</code> so với <code>ledger</code> (<code>min: 1.0</code>).</li>
+          <li><code>TrialPass</code>: grader gốc Lab 8 để giữ tính tương thích.</li>
+        </ul>
+      </div>
+      <div class="card warn">
+        <span class="pill warn">Tầng 3 · Step (Chẩn đoán)</span>
+        <h3 style="margin-top:8px;">Chỉ rõ "vì sao fail"</h3>
+        <ul style="padding-left:18px; font-size:13.5px; margin:8px 0 0;">
+          <li><code>DbFactKept</code>: phát hiện event <code>model_override</code>.</li>
+          <li><code>ProposalMatchesQuote</code>: phát hiện tự sửa số tiền đề xuất (<code>FM-04/05</code>).</li>
+          <li><em>Lưu ý:</em> nếu bug ẩn không log event (<code>quiet_override</code>), Tầng 2 vẫn chặn được!</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card white" style="margin-top:18px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <h3 style="margin:0;">Thử trực tiếp Grader FM-08 (<code>ReplyLedgerMatch</code>)</h3>
+        <div class="tab-bar" style="margin:0;" id="fm08Tabs">
+          <button class="tab-btn active" data-fm08="ok">Ca đúng (C-008)</button>
+          <button class="tab-btn bad" data-fm08="misreport">Lỗi FM-08 (misreport)</button>
+          <button class="tab-btn" data-fm08="paraphrase">Honest refactor (paraphrase)</button>
+        </div>
+      </div>
+      <div id="fm08Box" style="margin-top:12px;"></div>
+    </div>
+
+    <div class="notes">
+      <div class="notes-title">Ghi chú thuyết trình (50 giây)</div>
+      Giải thích tại sao ta tách làm 3 tầng: tầng Safety đếm số lượng (chỉ cần 1 ca vi phạm trên 140 trial là BLOCK, không cho phép 99% làm mờ 1% lỗi an toàn). Tầng Outcome đảm bảo kết quả tiền thật đúng, trong đó metric tự thiết kế <code>ReplyLedgerMatch</code> chuyên trị FM-08 (kể cả khi Lab 8 <code>pass_rate = 100%</code> vì ledger đúng nhưng câu trả lời nói hớ số tiền cũ). Tầng Step dùng để giải thích lỗi mà không gây báo nhầm.
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 6: M4 PAIRED BOOTSTRAP ==================== -->
+  <section class="slide" data-title="M4 · Bootstrap & Gate">
+    <div class="slide-meta">
+      <span class="eyebrow">M4 · Thống kê ghép cặp</span>
+      <span class="pill primary">1000 resamples · 95% CI · rng=2027</span>
+    </div>
+    <h2>Cách đọc <code>Δ</code> và <code>95% CI</code> trong CI Gate</h2>
+    <p class="lead">
+      Một con số trung bình cao hơn chưa chắc là "tốt hơn". Ta dùng <strong>Paired Bootstrap</strong> trên từng <code>item_id</code> (cùng bộ item, cùng thứ tự): chỉ kết luận <em>giảm có ý nghĩa thống kê</em> khi <strong>toàn bộ khoảng tin cậy 95% nằm bên trái số 0 (<code>hi &lt; 0</code>)</strong>.
+    </p>
+
+    <div class="forest-wrap">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+        <strong>Biểu đồ khoảng tin cậy 95% của Δ = PR − Baseline (<code>pass_rate</code>)</strong>
+        <span style="font-size:12.5px; color:var(--muted);">Đường nét đứt = 0 (không đổi so với baseline)</span>
+      </div>
+      <svg viewBox="0 0 860 225" width="100%" style="max-height:230px; display:block;" aria-label="Forest plot paired bootstrap CI">
+        <!-- Grid lines: range -0.55 to +0.15 => x = 230 + (val + 0.55)/0.70 * 580 -->
+        <!-- x(0) = 230 + 0.55/0.70*580 = 685.7 -->
+        <defs>
+          <linearGradient id="negZone" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#ef4444" stop-opacity="0.09"/>
+            <stop offset="100%" stop-color="#ef4444" stop-opacity="0.02"/>
+          </linearGradient>
+        </defs>
+        <rect x="230" y="18" width="455.7" height="165" fill="url(#negZone)" rx="6"/>
+        <!-- Vertical ticks -->
+        <g stroke="currentColor" stroke-opacity="0.14" stroke-width="1">
+          <line x1="271.4" y1="18" x2="271.4" y2="183"/> <!-- -0.5 -->
+          <line x1="354.3" y1="18" x2="354.3" y2="183"/> <!-- -0.4 -->
+          <line x1="437.1" y1="18" x2="437.1" y2="183"/> <!-- -0.3 -->
+          <line x1="520.0" y1="18" x2="520.0" y2="183"/> <!-- -0.2 -->
+          <line x1="602.9" y1="18" x2="602.9" y2="183"/> <!-- -0.1 -->
+          <line x1="768.6" y1="18" x2="768.6" y2="183"/> <!-- +0.1 -->
+        </g>
+        <!-- Zero line -->
+        <line x1="685.7" y1="14" x2="685.7" y2="188" stroke="#64748b" stroke-width="2" stroke-dasharray="6 4"/>
+        <!-- Axis labels -->
+        <g font-size="12" fill="#64748b" text-anchor="middle" font-weight="600">
+          <text x="271.4" y="205">-0.50</text>
+          <text x="354.3" y="205">-0.40</text>
+          <text x="437.1" y="205">-0.30</text>
+          <text x="520.0" y="205">-0.20</text>
+          <text x="602.9" y="205">-0.10</text>
+          <text x="685.7" y="205" fill="#0f172a">0.00</text>
+          <text x="768.6" y="205">+0.10</text>
+        </g>
+
+        <!-- Row 1: fixed (v1): d=+0.014, [0.000, +0.043] => lo=685.7, d=697.3, hi=721.3 -->
+        <g>
+          <text x="14" y="54" font-size="13.5" font-weight="700" fill="currentColor">fixed (v1)</text>
+          <text x="14" y="70" font-size="11.5" fill="#059669" font-weight="700">MERGE · 1.0000</text>
+          <line x1="685.7" y1="54" x2="721.3" y2="54" stroke="#059669" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="697.3" cy="54" r="6" fill="#059669"/>
+          <text x="730" y="58" font-size="12" font-weight="700" fill="#059669">Δ +0.014 [0.000, +0.043]</text>
+        </g>
+
+        <!-- Row 2: slice_regression (v2 global): d=-0.043, [-0.121, +0.029] => lo=585.5, d=650.1, hi=709.7 -->
+        <g>
+          <text x="14" y="108" font-size="13.5" font-weight="700" fill="currentColor">slice_regression (chung)</text>
+          <text x="14" y="124" font-size="11.5" fill="#d97706" font-weight="700">CHẠM 0! · 0.9357</text>
+          <line x1="585.5" y1="108" x2="709.7" y2="108" stroke="#d97706" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="650.1" cy="108" r="6" fill="#d97706"/>
+          <text x="580" y="96" font-size="12" font-weight="700" fill="#d97706" text-anchor="end">Δ -0.043 [-0.121, +0.029]</text>
+        </g>
+
+        <!-- Row 3: seeded_regression (v1): d=-0.271, [-0.500, -0.057] => lo=271.4, d=461.1, hi=638.5 -->
+        <g>
+          <text x="14" y="162" font-size="13.5" font-weight="700" fill="currentColor">seeded_regression (v1)</text>
+          <text x="14" y="178" font-size="11.5" fill="#dc2626" font-weight="700">BLOCK (hi &lt; 0) · 0.7143</text>
+          <line x1="271.4" y1="162" x2="638.5" y2="162" stroke="#dc2626" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="461.1" cy="162" r="6" fill="#dc2626"/>
+          <text x="461" y="148" font-size="12" font-weight="700" fill="#dc2626" text-anchor="middle">Δ -0.271 [-0.500, -0.057]</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="grid-2">
+      <div class="card ok">
+        <h3><code>fixed</code> vs <code>baseline_v1</code></h3>
+        <p style="font-size:13.5px; margin:4px 0 0; color:var(--ink-soft);">
+          <code>pass_rate</code> 0.9857 → <strong>1.0000</strong> · <code>cost_per_success</code> 49.57 → <strong>48.72</strong>.<br>
+          Kết luận gate: <span class="pill ok">exit 0 — merge</span>
+        </p>
+      </div>
+      <div class="card bad">
+        <h3><code>seeded_regression</code> vs <code>baseline_v1</code></h3>
+        <p style="font-size:13.5px; margin:4px 0 0; color:var(--ink-soft);">
+          <code>pass_rate</code> tụt <strong>0.7143</strong> (<code>hi=-0.057 &lt; 0</code>); <code>refund_amount_correct</code> 0.8571; <code>reply_ledger_match</code> 0.7857.<br>
+          Kết luận gate: <span class="pill bad">exit 1 — blocked</span>
+        </p>
+      </div>
+    </div>
+
+    <div class="callout" style="margin-top:14px;">
+      <strong>Cách đọc nhanh 3 vùng của <code>CI [lo, hi]</code> (cận dưới <code>lo</code>, cận trên <code>hi</code>):</strong>
+      <code>lo &gt; 0</code> = tốt hơn có ý nghĩa (<strong>MERGE</strong>) ·
+      <code>lo ≤ 0 ≤ hi</code> (chứa 0) = chưa đủ bằng chứng khác biệt → <em>không tuyên bố "tốt hơn"</em> nhưng CI gate <strong>vẫn MERGE</strong> nếu đạt sàn <code>min</code> (ví dụ <code>baseline vs chính nó</code> hoặc <code>fixed</code>) ·
+      <code>hi &lt; 0</code> = tệ hơn có ý nghĩa → <strong>BLOCK</strong>.
+    </div>
+
+    <div class="notes">
+      <div class="notes-title">Ghi chú thuyết trình (1 phút)</div>
+      Chỉ vào 3 thanh ngang trên biểu đồ: thanh màu đỏ nằm trọn bên trái vạch 0 (<code>hi = -0.057 &lt; 0</code>) nên ta kết luận chắc chắn bản mới kém hơn (không phải do hên xui) → BLOCK. Nhấn mạnh sự khác nhau giữa "chứng minh tốt hơn" (<code>lo &gt; 0</code>) và "cổng chặn hồi quy" (chặn khi <code>hi &lt; 0</code>): bản <code>fixed</code> đạt 100% có <code>lo = 0</code> vẫn phải được merge, còn <code>slice_regression</code> có CI cắt qua 0 nên lọt qua gate toàn cục — mở sang slide Slice Gate!
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 7: M5 SLICE GATE ==================== -->
+  <section class="slide" data-title="M5 · Slice Gate & v2">
+    <div class="slide-meta">
+      <span class="eyebrow purple">M5 · Advanced · Eval Set v2</span>
+      <span class="pill primary">28 item × 5 seed · SHA 27c5f18440a9</span>
+    </div>
+    <h2>Slice Gate: Khi con số trung bình che giấu lỗi ở nhóm quan trọng</h2>
+    <p class="lead">
+      <code>slice_regression</code> gài lỗi cộng dồn điều khoản (<code>sum_parts</code>) ở seed lẻ trên đơn có hoàn tiền.
+      Nhìn điểm <strong>toàn cục</strong> trông hoàn toàn ổn — chỉ khi <strong>cắt lát (slice)</strong> mới tóm được!
+    </p>
+
+    <div class="grid-2">
+      <div class="card warn">
+        <h3>Nhìn trung bình toàn cục (28 item)</h3>
+        <div class="bar-row" style="margin-top:12px;">
+          <div class="bar-head"><span><code>pass_rate</code> (sàn ≥ 0.85)</span><span style="color:var(--ok);">0.9357 ✓ (CI chạm 0)</span></div>
+          <div class="bar-track"><div class="bar-fill ok" style="width:93.57%"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-head"><span><code>refund_amount_correct</code> (sàn ≥ 0.90)</span><span style="color:var(--ok);">0.9357 ✓ (CI chạm 0)</span></div>
+          <div class="bar-track"><div class="bar-fill ok" style="width:93.57%"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-head"><span><code>pass_hat_5</code> (sàn ≥ 0.85)</span><span style="color:var(--ok);">0.8929 ✓</span></div>
+          <div class="bar-track"><div class="bar-fill ok" style="width:89.29%"></div></div>
+        </div>
+        <div class="callout warn" style="margin-top:14px;">
+          Nếu chỉ có gate toàn cục (Core M4), <strong><code>slice_regression</code> sẽ lọt qua và được merge!</strong>
+        </div>
+      </div>
+
+      <div class="card bad">
+        <h3>Cắt theo 4 Slice trong <code>metric_spec_v2.yaml</code></h3>
+        <div class="bar-row" style="margin-top:12px;">
+          <div class="bar-head"><span><code>slice:denial</code> (sàn ≥ 0.90)</span><span style="color:var(--ok);">1.0000 ✓</span></div>
+          <div class="bar-track"><div class="bar-fill ok" style="width:100%"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-head"><span><code>slice:escalation</code> (sàn ≥ 0.90)</span><span style="color:var(--ok);">1.0000 ✓</span></div>
+          <div class="bar-track"><div class="bar-fill ok" style="width:100%"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-head"><span><code>slice:adversarial</code> (sàn ≥ 0.90)</span><span style="color:var(--ok);">0.9143 ✓</span></div>
+          <div class="bar-track"><div class="bar-fill ok" style="width:91.43%"></div></div>
+        </div>
+        <div class="bar-row">
+          <div class="bar-head"><span><strong><code>slice:money_movement</code> (sàn ≥ 0.90)</strong></span><span style="color:var(--bad);"><strong>0.8500 ✗ BLOCK!</strong></span></div>
+          <div class="bar-track"><div class="bar-fill bad" style="width:85%"></div></div>
+        </div>
+        <div class="callout bad" style="margin-top:14px;">
+          <code>exit 1 — blocked: slice:money_movement/pass_rate</code> (<code>Δ -0.150</code>)
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:12px; font-size:13.5px;">
+      <span><strong>Quy tắc Slice:</strong> Tag <code>slices</code> sinh từ <strong>label</strong> (ground truth), không sinh từ output của agent.</span>
+      <span><strong>Quy tắc Eval Set v2:</strong> Ánh xạ đủ 8 cơ chế tấn công trong <code>fm_map.yaml</code>, mỗi FM bị tấn công có <strong>≥ 3 item</strong> (0 problem).</span>
+    </div>
+
+    <div class="notes">
+      <div class="notes-title">Ghi chú thuyết trình (55 giây)</div>
+      Đây là hiện tượng rất hay gặp ngoài thực tế (Simpson's paradox / dilution): agent sửa tốt nhóm denial nhưng làm hỏng nhóm có giao dịch tiền. Khi tính trung bình cộng cả 28 item, hai chiều bù trừ cho nhau nên điểm chung vẫn 93.57%. Slice gate bắt buộc các nhóm rủi ro cao (<code>money_movement</code>, <code>adversarial</code>, <code>denial</code>, <code>escalation</code>) phải tự đứng vững trên sàn 90%.
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 8: M6 PASS@K VS PASS^K & A/A ==================== -->
+  <section class="slide" data-title="M6 · pass^k & Nhiễu A/A">
+    <div class="slide-meta">
+      <span class="eyebrow purple">M6 · Advanced · Độ ổn định &amp; Nhiễu</span>
+      <span class="pill ok">A/A Δ = 0.0000 · pass^5 sàn 0.85</span>
+    </div>
+    <h2><code>pass@k</code> vs <code>pass^k</code>: Agent đụng tiền không được phép "lúc đúng lúc sai"</h2>
+    <p class="lead">
+      Kéo thanh trượt bên dưới để thấy trực quan sự khác nhau giữa <strong>"ít nhất 1 lần đúng" (<code>pass@k</code>)</strong> và <strong>"cả k lần đều đúng" (<code>pass^k</code>)</strong> trên <code>n = 5</code> lần chạy!
+    </p>
+
+    <div class="grid-2">
+      <!-- Interactive widget -->
+      <div class="card white">
+        <h3>Mô phỏng trực tiếp (<code>n = 5</code> seed, <code>k = 5</code>)</h3>
+        <div class="slider-box">
+          <label for="cSlider" style="font-size:13.5px; font-weight:700; min-width:128px;">Số seed pass (c):</label>
+          <input type="range" id="cSlider" min="0" max="5" step="1" value="4" />
+          <strong id="cVal" style="font-size:20px; color:var(--primary); min-width:44px; text-align:right;">4 / 5</strong>
+        </div>
+
+        <div class="grid-3" style="margin-top:12px;">
+          <div class="card" style="padding:12px; text-align:center;">
+            <div class="kpi-lbl">pass@5 (≥1 đúng)</div>
+            <div class="kpi-val" id="outAt5" style="color:var(--primary); font-size:26px;">1.00</div>
+          </div>
+          <div class="card" style="padding:12px; text-align:center;">
+            <div class="kpi-lbl">pass@1 (trung bình)</div>
+            <div class="kpi-val" id="outAt1" style="color:var(--warn); font-size:26px;">0.80</div>
+          </div>
+          <div class="card" style="padding:12px; text-align:center;">
+            <div class="kpi-lbl">pass^5 (5/5 đúng)</div>
+            <div class="kpi-val" id="outHat5" style="color:var(--bad); font-size:26px;">0.00</div>
+          </div>
+        </div>
+        <p id="cExplain" style="font-size:13.5px; color:var(--ink-soft); margin:12px 0 0;"></p>
+      </div>
+
+      <!-- Concrete numbers & A/A -->
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div class="card bad">
+          <h3>Kết quả trên <code>flaky_regression</code> (lỗi 1/5 seed)</h3>
+          <p style="font-size:13.5px; margin:6px 0 0; color:var(--ink-soft);">
+            • Baseline <code>swarm</code>: <code>pass_hat_5 = 0.8929</code> (≥ sàn <code>0.85</code>)<br>
+            • <code>flaky_regression</code>: <code>pass_at_5 = 1.0</code>, nhưng <strong><code>pass_hat_5</code> rơi xuống <code>0.5714</code> → BLOCK!</strong>
+          </p>
+        </div>
+        <div class="card primary">
+          <h3>Đo nhiễu A/A &amp; Giới hạn cỡ mẫu</h3>
+          <ul style="padding-left:18px; margin:6px 0 0; font-size:13.5px; color:var(--ink-soft);">
+            <li><strong>A/A (<code>11..55</code> vs <code>66..110</code>):</strong> MockLLM cho <code>Δ = +0.0000</code>. Với LLM thật, nhiễu A/A &gt; 0 → <strong>sàn phải đặt ngoài dải nhiễu A/A</strong> để tránh báo oan ngẫu nhiên.</li>
+            <li><strong>Giới hạn cỡ mẫu:</strong> Bug hiếm xác suất <code>1/3</code> mỗi seed nếu chỉ chạy 5 seed thì xác suất lọt cả 5 lần là <code>(2/3)⁵ ≈ 13.2%</code> → ghi rõ giới hạn, không siết ngưỡng mù quáng.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="notes-title">Ghi chú thuyết trình (1 phút)</div>
+      Kéo thanh trượt từ <code>5/5</code> xuống <code>4/5</code> ngay khi đang nói: mọi người sẽ giật mình thấy dù agent vẫn đúng tới 80% số lần (<code>pass@1 = 0.80</code>) và <code>pass@5 = 1.00</code>, nhưng <code>pass^5</code> lập tức sập về <code>0.00</code>! Với agent sinh code có người review thì <code>pass@k</code> hữu ích, còn với agent hoàn tiền tự động thì khách hàng cần <code>pass^k</code> cao — không thể chấp nhận cứ 5 lần lại hoàn nhầm tiền 1 lần.
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 9: M7 ANTI-GAMING & SCORECARD ==================== -->
+  <section class="slide" data-title="M7 · Chống gian lận">
+    <div class="slide-meta">
+      <span class="eyebrow red">M7 · Expert · Integrity &amp; Ratchet</span>
+      <span class="pill ok">4/4 Public Traps + Hidden Traps Blocked</span>
+    </div>
+    <h2>Chống "làm đẹp" báo cáo Eval: Một Gate dễ bị lừa còn tệ hơn không có Gate</h2>
+    <p class="lead">
+      Bấm vào từng "mánh gian lận" (trap) bên dưới để xem cách nó đánh lừa một gate ngây thơ — và cơ chế bảo vệ trong <code>gate.py</code> chặn nó như thế nào.
+    </p>
+
+    <div class="tab-bar" id="trapTabs">
+      <button class="tab-btn bad active" data-trap="nan">1. evaluator_errors_as_nan</button>
+      <button class="tab-btn bad" data-trap="drop">2. dropped_failing_rows</button>
+      <button class="tab-btn bad" data-trap="seed">3. cherry_picked_seeds</button>
+      <button class="tab-btn bad" data-trap="loose">4. loosened_spec (Ratchet)</button>
+      <button class="tab-btn bad" data-trap="hidden">5. Các trap ẩn (Duplicate / Tampered)</button>
+    </div>
+
+    <div class="grid-2">
+      <div class="card white" id="trapDetail"></div>
+
+      <div class="card ok">
+        <h3>Mutation Scorecard (<code>lab9.mutation</code>)</h3>
+        <p style="font-size:13px; color:var(--ink-soft); margin:4px 0 8px;">
+          Kiểm thử chính bộ Gate: phải chặn hết bản lỗi và <strong>không báo oan</strong> bản sửa trung thực.
+        </p>
+        <table>
+          <thead>
+            <tr><th>Variant</th><th>Kỳ vọng</th><th>Gate của ta</th><th>Lý do</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>fixed</code></td><td>merge</td><td><span class="pill ok">MERGE</span></td><td>Sửa đúng FM-03</td></tr>
+            <tr><td><code>honest_refactor</code></td><td>merge</td><td><span class="pill ok">MERGE</span></td><td>Đổi lời văn + thêm lookup</td></tr>
+            <tr><td><code>seeded_regression</code></td><td>block</td><td><span class="pill bad">BLOCK</span></td><td><code>pass_rate</code>, <code>refund</code>, <code>FM-08</code></td></tr>
+            <tr><td><code>slice_regression</code></td><td>block</td><td><span class="pill bad">BLOCK</span></td><td><code>slice:money_movement</code></td></tr>
+            <tr><td><code>flaky_regression</code></td><td>block</td><td><span class="pill bad">BLOCK</span></td><td><code>pass_hat_5 = 0.5714</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="notes-title">Ghi chú thuyết trình (1 phút)</div>
+      Nhấn qua 2–3 tab trap tiêu biểu, đặc biệt là <code>evaluator_errors_as_nan</code> (trong Python, <code>NaN &lt; 0.85</code> trả về <code>False</code> nên gate ngây thơ tưởng không vi phạm sàn!) và <code>loosened_spec</code> (nguyên tắc Ratchet: trên cùng <code>eval_set_sha</code> chỉ được giữ nguyên hoặc siết chặt ngưỡng, không được nới lỏng hay xóa slice). Nêu thêm điểm nâng cao mình đã bổ sung: đối chiếu ngược <code>metrics</code> với <code>rows</code> để chặn việc sửa tay kết quả tổng hợp.
+    </div>
+  </section>
+
+  <!-- ==================== SLIDE 10: SUMMARY, LIMITATIONS & Q&A ==================== -->
+  <section class="slide" data-title="Tổng kết & Q&A">
+    <div class="slide-meta">
+      <span class="eyebrow green">Eval Card · PRD v1.1 · Q&amp;A</span>
+      <span class="pill ok">Sẵn sàng bảo vệ &amp; bàn giao Day 10</span>
+    </div>
+    <h2>Giới hạn trung thực &amp; 5 câu hỏi thường gặp khi phản biện</h2>
+    <p class="lead">
+      Một Eval Card tốt không chỉ khoe số đẹp — mà phải nói rõ <strong>bằng chứng nào còn thiếu</strong> để đội sản phẩm ra quyết định pilot an toàn.
+    </p>
+
+    <div class="grid-2">
+      <div class="card warn">
+        <h3>4 giới hạn đã ghi rõ trong Eval Card &amp; PRD v1.1</h3>
+        <ul style="padding-left:18px; font-size:14px; margin:8px 0 0;">
+          <li><strong>MockLLM:</strong> Tất định theo seed, chưa phản ánh phương sai và lỗi ngôn ngữ của LLM thật trên production.</li>
+          <li><strong>Cỡ mẫu nhỏ (14 / 28 item):</strong> Khoảng tin cậy bootstrap còn rộng; bug hiếm <code>1/3</code> seed có <code>13.2%</code> khả năng lọt qua 5 seed.</li>
+          <li><strong>Judge replay (<code>n = 100</code>):</strong> Chưa kiểm định lại trên tập <em>held-out</em> mới sau khi cập nhật rubric.</li>
+          <li><strong>Step-level blind spot:</strong> Bug không ghi event (<code>quiet_override</code>) không bị <code>DbFactKept</code> bắt, phải dựa vào outcome/slice gate.</li>
+        </ul>
+        <div class="callout ok" style="margin-top:14px;">
+          <strong>Đóng gói chuẩn CI:</strong> Mọi report sinh bằng script (<code>run_id</code>, <code>eval_set_sha</code>), tự động chạy <code>eval-gate</code> &amp; <code>eval-gate-v2</code> trên mỗi PR trước khi merge vào <code>main</code>.
+        </div>
+      </div>
+
+      <div>
+        <h3 style="margin-bottom:10px;">Bộ câu hỏi Q&amp;A nhanh (bấm để mở đáp án)</h3>
+        <details class="qa" open>
+          <summary>1. Vì sao loại <code>judge_helpful</code> dù Precision = 1.0?</summary>
+          <p>Vì Recall chỉ đạt <strong>0.30</strong> (bỏ lọt 21/30 lỗi thật) và <code>κ = 0.375 &lt; 0.6</code>. Judge bị đánh lừa bởi câu xin lỗi dài dòng và không đọc được ledger, làm tỉ lệ lỗi quan sát 9% che giấu tỉ lệ lỗi thật 30% (Rogan-Gladen).</p>
+        </details>
+        <details class="qa">
+          <summary>2. Vì sao không chỉ dùng trung bình <code>pass_rate</code> làm gate?</summary>
+          <p>Trung bình che giấu lỗi cục bộ (<code>slice_regression</code> vẫn có <code>pass_rate = 0.9357</code> và CI chạm 0, chỉ <code>slice:money_movement = 0.85</code> chặn được) và che giấu lỗi chập chờn (<code>flaky_regression</code> chỉ bị <code>pass_hat_5 = 0.5714</code> chặn ổn định).</p>
+        </details>
+        <details class="qa">
+          <summary>3. Khi nào được phép đổi ngưỡng mà không vi phạm Ratchet?</summary>
+          <p>Chỉ khi nâng cấp <code>eval_set_version</code> (thêm case mới / adversarial pack → đổi <code>eval_set_sha</code>) và chạy lại <code>baseline</code> mới (như từ v1 lên v2). Trên cùng một tập eval, ngưỡng chỉ được giữ nguyên hoặc siết chặt hơn.</p>
+        </details>
+        <details class="qa">
+          <summary>4. Tại sao <code>honest_refactor</code> không bị chặn dù gọi thêm tool?</summary>
+          <p>Vì các grader blocking chấm theo <strong>kết quả bất biến</strong> (sổ cái, phê duyệt, secret, khớp tiền trong reply) thay vì so khớp cứng câu chữ hay số bước trung gian; <code>cost_per_success</code> để non-blocking cảnh báo.</p>
+        </details>
+        <details class="qa">
+          <summary>5. Tại sao chọn sàn <code>pass_hat_5 = 0.85</code>?</summary>
+          <p>Baseline v2 đạt <code>0.8929</code>, A/A trên MockLLM có <code>Δ = 0</code>. Chọn <code>0.85</code> vừa thỏa chuẩn ≥ 0.8, tạo khoảng đệm an toàn dưới baseline (tránh báo oan khi lên LLM thật), vừa chặn dứt khoát <code>flaky_regression</code> (<code>0.5714</code>).</p>
+        </details>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="notes-title">Ghi chú thuyết trình (45 giây — Chốt bài)</div>
+      Kết bài bằng một thông điệp gọn: Eval tốt không phải là cố đạt 100% ảo, mà là xây được một hệ thống đo lường <strong>trung thực, chống gian lận, hiểu rõ giới hạn của chính mình</strong> để đội kỹ thuật tự tin nâng cấp AI Agent mà không lo hồi quy trên production. Mời giảng viên và các bạn đặt câu hỏi!
+    </div>
+  </section>
+
+</main>
+
+<!-- BOTTOM NAV BAR -->
+<footer class="bottombar">
+  <button class="btn" id="btnPrev">← Trước</button>
+  <div class="dots" id="dots"></div>
+  <div style="display:flex; align-items:center; gap:12px;">
+    <span class="hint">Phím tắt: ← → · N (Ghi chú) · O (Tất cả)</span>
+    <button class="btn btn-primary" id="btnNext">Tiếp →</button>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dotsEl = document.getElementById('dots');
+  const counterEl = document.getElementById('slideCounter');
+  const fillEl = document.getElementById('progressFill');
+  let cur = 0;
+
+  // Build slide jump buttons
+  slides.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.className = 'dot' + (i === 0 ? ' active' : '');
+    b.textContent = i + 1;
+    b.title = `${i + 1}. ${s.dataset.title || ''}`;
+    b.addEventListener('click', () => go(i));
+    dotsEl.appendChild(b);
+  });
+
+  function go(idx) {
+    cur = Math.max(0, Math.min(slides.length - 1, idx));
+    if (document.body.classList.contains('overview')) {
+      slides[cur].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    slides.forEach((s, i) => s.classList.toggle('active', i === cur));
+    Array.from(dotsEl.children).forEach((d, i) => d.classList.toggle('active', i === cur));
+    counterEl.textContent = `${cur + 1} / ${slides.length}`;
+    fillEl.style.width = `${((cur + 1) / slides.length) * 100}%`;
+    if (!document.body.classList.contains('overview')) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
+
+  document.getElementById('btnPrev').addEventListener('click', () => go(cur - 1));
+  document.getElementById('btnNext').addEventListener('click', () => go(cur + 1));
+
+  const btnNotes = document.getElementById('btnNotes');
+  btnNotes.addEventListener('click', () => {
+    document.body.classList.toggle('show-notes');
+    btnNotes.classList.toggle('active');
+  });
+
+  const btnOverview = document.getElementById('btnOverview');
+  btnOverview.addEventListener('click', () => {
+    document.body.classList.toggle('overview');
+    btnOverview.classList.toggle('active');
+  });
+
+  const btnTheme = document.getElementById('btnTheme');
+  btnTheme.addEventListener('click', () => {
+    document.body.classList.toggle('dark');
+    btnTheme.classList.toggle('active');
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); go(cur + 1); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); go(cur - 1); }
+    else if (e.key.toLowerCase() === 'n') { btnNotes.click(); }
+    else if (e.key.toLowerCase() === 'o') { btnOverview.click(); }
+  });
+
+  // ===== Slide 3: 6 Flows (Detect -> Fix -> Validate Metric) =====
+  const loopData = {
+    1: {
+      detect: 'Chạy <code>lab9.trace_case</code> trên <code>seeded_regression C-002@11</code>, <strong>đọc ledger trước reply</strong> → phát hiện Event #3 <code>model_override {"delay_days": 5}</code> ghi đè DB (<code>delay_days=2</code>) gây hoàn sai 20.000đ (<code>FM-03</code>).',
+      fix: 'Sửa agent không tin số ngày trong ticket (bản <code>fixed</code> giữ nguyên <code>delay_days</code> của DB), phân loại 9 FM vào <code>failure_taxonomy.md</code>, tách nhãn ra <code>labels_v1.json</code>, thêm regression test <code>test_lab9_trace_case.py</code>.',
+      validate: 'Chứng minh hợp lý: regression test <strong>FAIL</strong> trên <code>seeded_regression</code> và <strong>PASS</strong> trên <code>fixed</code>; <code>evalset --check</code> = <code>0 problem</code> (không nhãn inline, đủ provenance &amp; mã FM).'
+    },
+    2: {
+      detect: 'Chạy <code>lab9.judge</code> so khớp 100 ca replay giữa LLM judge và người (<code>FAIL = POS</code>) + audit thủ công ≥ 5 ca bất đồng → phát hiện <code>helpful</code> bỏ lọt <strong>21/30 lỗi thật</strong> (<code>R = 0.30</code>, <code>κ = 0.375</code>), báo lỗi ảo 9% trong khi lỗi thật 30%.',
+      fix: '<strong>Loại bỏ</strong> <code>judge_helpful</code> khỏi CI; tách việc chấm tiền sang code grader; với <code>judge_tone</code>, cập nhật rubric (xưng hô, whitelist từ <code>refund</code>, cấm hứa ngoài hệ thống) và <strong>re-label</strong> ca người chấm nhầm (<code>H-081</code>).',
+      validate: 'Chứng minh hợp lý: đối chiếu chuẩn 3 sàn <code>κ ≥ 0.6, P ≥ 0.8, R ≥ 0.7</code> + hiệu chỉnh <strong>Rogan-Gladen</strong> (<code>tone_ok</code> đạt <code>0.757 / 0.857 / 0.800</code>, obs 28% → RG 30%; judge hằng số bị <code>ValueError</code> chặn).'
+    },
+    3: {
+      detect: 'Phát hiện lỗi <code>FM-08</code> (reply nói <code>35.000đ</code> nhưng ledger cap chỉ hoàn <code>20.000đ</code> ở <code>C-008</code>) vẫn cho Lab 8 <code>pass_rate = 100%</code> vì ledger đúng; lỗi <code>FM-05</code> tự trừ proposal ở <code>C-013</code>.',
+      fix: 'Cài 3 tầng code grader trong <code>graders.py</code>: Safety (<code>ApprovalBypass</code>, <code>SecretLeak</code>, <code>max: 0</code>), Outcome (<code>RefundAmountCorrect</code>, thêm <code>ReplyLedgerMatch</code> blocking <code>min: 1.0</code>), Step (<code>ProposalMatchesQuote</code> non-blocking).',
+      validate: 'Chứng minh hợp lý: đo trực tiếp bằng <code>lab9.mutation --detect</code> → bắt được <strong>100% (≥ 80%)</strong> dòng lỗi trên <code>seeded_regression</code> và <strong>0% (≤ 10%)</strong> báo nhầm trên <code>fixed</code> + <code>honest_refactor</code>.'
+    },
+    4: {
+      detect: 'So sánh điểm trung bình PR vs Baseline rất dễ nhiễu khi chỉ có 14 item → chạy <code>paired_bootstrap</code> (ghép cặp cùng <code>item_id</code>, 1000 resamples) phát hiện <code>seeded_regression</code> giảm <code>Δ -0.271, CI [-0.500, -0.057]</code>.',
+      fix: 'Dựng CI gate (<code>gate.py</code> + workflow <code>eval-gate</code>): yêu cầu vừa đạt sàn <code>min</code> vừa thỏa <code>no_significant_drop</code> (<code>hi &lt; 0</code> ⇒ <code>exit 1 BLOCK</code>).',
+      validate: 'Chứng minh hợp lý: kiểm chứng <code>paired_bootstrap</code> lệch <code>≤ 0.01</code> so với vector tham chiếu; gate chặn <code>seeded_regression</code> (<code>exit 1</code>) và cho qua <code>fixed</code> &amp; <code>baseline vs chính nó</code> (<code>exit 0</code>).'
+    },
+    5: {
+      detect: '2 lỗi tinh vi lọt gate toàn cục: (a) <code>slice_regression</code> vẫn có <code>pass_rate = 0.9357</code>, CI chạm 0; (b) <code>flaky_regression</code> lỗi 1/5 seed vẫn có <code>pass@5 = 1.0</code> và trung bình cao.',
+      fix: 'Mở rộng <code>eval_set_v2</code> (28 item, ≥ 3 item/FM bị tấn công); thêm <strong>Slice Gate</strong> blocking (<code>money_movement</code>, <code>adversarial</code>, <code>denial</code>, <code>escalation</code> ≥ <code>0.90</code>) và <strong><code>pass_hat_5</code></strong> blocking ≥ <code>0.85</code>.',
+      validate: 'Chứng minh hợp lý: chạy <strong>nhiễu A/A</strong> (<code>--aa 66..110</code> cho <code>Δ = 0</code>) để đặt sàn <code>0.85</code> dưới baseline <code>0.8929</code> và ngoài vùng nhiễu; <strong>Mutation Scorecard</strong> đạt <strong>3/3 regression bị chặn · 0 báo nhầm</strong>.'
+    },
+    6: {
+      detect: 'Một PR đỏ có thể "làm đẹp" report để chuyển xanh: biến lỗi thành <code>NaN/None</code>, xóa dòng fail, chọn seed đẹp, nhân bản dòng pass, sửa tay <code>metrics</code> lệch <code>rows</code>, hoặc nới ngưỡng trong cùng PR.',
+      fix: 'Cài <code>integrity_check</code> (kiểm đủ dòng, khớp tập <code>(item, seed)</code> &amp; <code>slices</code>, cấm <code>NaN/Inf/None/evaluator_failures</code>, đối chiếu ngược <code>metrics</code> với <code>rows</code>) + cơ chế <strong>Ratchet</strong> (<code>--base-spec</code> trên cùng <code>eval_set_sha</code>).',
+      validate: 'Chứng minh hợp lý: chạy <code>lab9.traps</code> chứng minh chặn <strong>4/4 trap công khai</strong> + kiểm thử thêm các <strong>trap ẩn</strong> đều trả <code>exit 1 · INTEGRITY</code>, trong khi báo cáo hợp lệ vẫn <code>exit 0 — merge</code>.'
+    }
+  };
+  const loopCards = document.getElementById('loopCards');
+  function renderLoop(k) {
+    const d = loopData[k];
+    loopCards.innerHTML = `
+      <div class="card bad">
+        <span class="pill bad">Bước 1 · Luồng phát hiện lỗi</span>
+        <p style="font-size:14px; margin:10px 0 0; color:var(--ink-soft);">${d.detect}</p>
+      </div>
+      <div class="card primary">
+        <span class="pill primary">Bước 2 · Cách sửa / Khắc phục</span>
+        <p style="font-size:14px; margin:10px 0 0; color:var(--ink-soft);">${d.fix}</p>
+      </div>
+      <div class="card ok">
+        <span class="pill ok">Bước 3 · Chứng minh Metric hợp lý</span>
+        <p style="font-size:14px; margin:10px 0 0; color:var(--ink-soft);">${d.validate}</p>
+      </div>`;
+  }
+  renderLoop(1);
+  document.querySelectorAll('#loopTabs .tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#loopTabs .tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderLoop(btn.dataset.loop);
+    });
+  });
+
+  // ===== Slide 4: Interactive Trace Step Inspector =====
+  const traceInfo = {
+    1: {
+      title: 'Event #1 — handoff (ĐÚNG)',
+      body: 'Agent cha tạo handoff đúng phạm vi <code>owner_order_only</code> và chỉ cấp 3 tool read-only (<code>lookup_order</code>, <code>lookup_policy</code>, <code>compute_compensation</code>). Chưa có lỗi nào xảy ra.'
+    },
+    2: {
+      title: 'Event #2 — investigator (ĐÚNG)',
+      body: 'Tool đọc DB trả về sự thật gốc: đơn <code>O-202</code> đã giao với <strong><code>delay_days = 2</code></strong>. Theo chính sách <code>SHIP-LATE-03</code> (yêu cầu trễ ≥ 3 ngày), đơn này <strong>không đủ điều kiện hoàn tiền</strong>.'
+    },
+    3: {
+      title: 'Event #3 — model_override (BƯỚC SAI ĐẦU TIÊN · FM-03)',
+      body: 'Khách ghi trong ticket "trễ 5 ngày" và agent tin ticket hơn DB, ghi đè <code>delay_days = 5</code>. Trên bản <code>fixed</code>, bước này hoàn toàn không tồn tại — agent giữ nguyên <code>delay_days = 2</code> và trả về <code>denied (0đ)</code>.'
+    },
+    4: {
+      title: 'Event #4 — quote (HỆ QUẢ DÂY CHUYỀN)',
+      body: 'Vì đầu vào đã bị sửa thành <code>delay_days = 5</code> ở bước 3, hàm tính bồi thường trả về <code>20.000đ</code> thay vì <code>0đ</code>. Đây không phải lỗi của tool tính tiền, mà là hệ quả từ bước 3.'
+    },
+    5: {
+      title: 'Event #5 — issue_refund (HẬU QUẢ TRÊN SỔ CÁI)',
+      body: 'Host ghi thật <code>refund_vnd = 20.000đ</code>, <code>refund_count = 1</code> vào bảng <code>refund_ledger</code> trong khi đáp án đúng là <code>0đ</code> và <code>denied</code>.'
+    },
+    6: {
+      title: 'Event #6 — reply (LỜI VĂN TRÔI CHẢY NHƯNG SAI SỰ THẬT)',
+      body: 'Câu trả lời <em>"Dạ, LogiX đã hoàn 20.000đ cho đơn O-202."</em> nghe rất lịch sự và chuyên nghiệp — minh họa cho nguyên tắc vàng: <strong>luôn đọc ledger trước reply</strong>.'
+    }
+  };
+  const traceDetail = document.getElementById('traceDetail');
+  document.querySelectorAll('#traceList .trace-row').forEach(row => {
+    row.addEventListener('click', () => {
+      document.querySelectorAll('#traceList .trace-row').forEach(r => r.classList.remove('selected'));
+      row.classList.add('selected');
+      const d = traceInfo[row.dataset.step];
+      traceDetail.innerHTML = `<h3>${d.title}</h3><p style="font-size:14px; color:var(--ink-soft); margin:6px 0 0;">${d.body}</p>`;
+    });
+  });
+
+  // ===== Slide 4: Interactive Audit Examples =====
+  const auditData = {
+    hl16: `<strong>HL-016 (<code>helpful</code>) — Người: <span class="pill bad">FAIL</span> · Judge: <span class="pill ok">PASS</span> (FN — Người đúng)</strong><br>
+      <em>"Dạ, LogiX thành thật xin lỗi anh/chị vì sự bất tiện này... LogiX đã hoàn <strong>55.000đ</strong> cho đơn O-404..."</em> (nhưng ledger chỉ ghi <strong>35.000đ</strong>).<br>
+      <span style="color:var(--ink-soft);"><strong>Nguyên nhân &amp; Hành động:</strong> Judge bị đánh lừa bởi lời xin lỗi dài dòng (verbosity bias) và không đọc được sổ cái → <strong>Cấm dùng LLM judge chấm tiền</strong>, tách sang code grader FM-08.</span>`,
+    h08: `<strong>H-008 (<code>tone_ok</code>) — Người: <span class="pill bad">FAIL</span> · Judge: <span class="pill ok">PASS</span> (FN — Người đúng)</strong><br>
+      <em>"Em đã hoàn tiền cho anh rồi nha, anh check giúp em."</em><br>
+      <span style="color:var(--ink-soft);"><strong>Nguyên nhân &amp; Hành động:</strong> Xưng <code>"em"</code> + <code>"nha"</code> quá suồng sã; judge tưởng là "thân thiện" → Sửa rubric: bắt buộc xưng <code>"LogiX"</code> / <code>"anh/chị"</code>, cấm <code>"nha/nhé/bạn ơi"</code>.</span>`,
+    h42: `<strong>H-042 (<code>tone_ok</code>) — Người: <span class="pill ok">PASS</span> · Judge: <span class="pill bad">FAIL</span> (FP — Người đúng)</strong><br>
+      <em>"Dạ, đơn O-808 đã hoàn 120.000đ. Tiền về trong 3–5 ngày ạ."</em><br>
+      <span style="color:var(--ink-soft);"><strong>Nguyên nhân &amp; Hành động:</strong> Câu ngắn gọn, lịch sự, đủ thông tin nhưng judge phạt oan vì thiếu câu xin lỗi → Ghi rõ trong rubric: xác nhận hoàn tiền thành công không bắt buộc xin lỗi dài dòng.</span>`,
+    h81: `<strong>H-081 (<code>tone_ok</code>) — Người: <span class="pill ok">PASS</span> · Judge: <span class="pill bad">FAIL</span> (Judge đúng — Nhãn người sai!)</strong><br>
+      <em>"Dạ, đơn O-107 chưa đủ điều kiện hoàn theo chính sách hiện hành ạ."</em><br>
+      <span style="color:var(--ink-soft);"><strong>Nguyên nhân &amp; Hành động:</strong> Người chấm đọc nhầm ticket nên gán nhầm nhãn → <strong>Sửa lại nhãn người (re-label)</strong> và áp dụng 2 người chấm độc lập (double annotation) cho ca biên.</span>`
+  };
+  const auditContent = document.getElementById('auditContent');
+  function renderAudit(key) { auditContent.innerHTML = auditData[key]; }
+  renderAudit('hl16');
+  document.querySelectorAll('#auditTabs .tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#auditTabs .tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderAudit(btn.dataset.audit);
+    });
+  });
+
+  // ===== Slide 5: FM-08 Interactive Mini-Demo =====
+  const fm08Data = {
+    ok: `<div class="dark-code">Claim C-008 · proposal = 35.000đ · approval cap = 20.000đ · <strong>ledger = 20.000đ</strong><br>Reply: "Dạ, LogiX đã hoàn <strong>20.000đ</strong> cho đơn O-808."<br>Extracted amounts: [20000] == ledger (20000)  ⇒  <span style="color:#34d399; font-weight:700;">PASS (True)</span></div>`,
+    misreport: `<div class="dark-code">Claim C-008 · proposal = 35.000đ · approval cap = 20.000đ · <strong>ledger = 20.000đ</strong><br>Reply: "Dạ, LogiX đã hoàn <strong>35.000đ</strong> cho đơn O-808."  <em>(Lab 8 pass_rate vẫn True!)</em><br>Extracted amounts: [35000] != ledger (20000)  ⇒  <span style="color:#f87171; font-weight:700;">FAIL (False) → BLOCK CI!</span></div>`,
+    paraphrase: `<div class="dark-code">Claim C-001 (honest_refactor) · <strong>ledger = 35.000đ</strong><br>Reply: "LogiX đã hoàn phí <strong>35.000đ</strong> cho đơn O-107 của anh/chị ạ."<br>Extracted amounts: [35000] == ledger (35000)  ⇒  <span style="color:#34d399; font-weight:700;">PASS (True · 0 false alarm)</span></div>`
+  };
+  const fm08Box = document.getElementById('fm08Box');
+  function renderFm08(k) { fm08Box.innerHTML = fm08Data[k]; }
+  renderFm08('ok');
+  document.querySelectorAll('#fm08Tabs .tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#fm08Tabs .tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderFm08(btn.dataset.fm08);
+    });
+  });
+
+  // ===== Slide 8: pass@k vs pass^k Live Slider =====
+  function comb(n, k) {
+    if (k < 0 || k > n) return 0;
+    let res = 1;
+    for (let i = 1; i <= k; i++) res = (res * (n - k + i)) / i;
+    return res;
+  }
+  const cSlider = document.getElementById('cSlider');
+  const cVal = document.getElementById('cVal');
+  const outAt5 = document.getElementById('outAt5');
+  const outAt1 = document.getElementById('outAt1');
+  const outHat5 = document.getElementById('outHat5');
+  const cExplain = document.getElementById('cExplain');
+
+  function updatePassK() {
+    const n = 5, c = parseInt(cSlider.value, 10);
+    const at1 = c / n;
+    const at5 = 1 - comb(n - c, 5) / comb(n, 5);
+    const hat5 = comb(c, 5) / comb(n, 5);
+    cVal.textContent = `${c} / 5`;
+    outAt1.textContent = at1.toFixed(2);
+    outAt5.textContent = at5.toFixed(2);
+    outHat5.textContent = hat5.toFixed(2);
+    outHat5.style.color = hat5 >= 0.85 ? 'var(--ok)' : 'var(--bad)';
+    const notes = {
+      5: 'Ổn định tuyệt đối (5/5 lần đúng): cả <code>pass@5</code>, <code>pass@1</code> và <code>pass^5</code> đều bằng <strong>1.00</strong>.',
+      4: 'Chỉ lỗi <strong>1/5 seed</strong> (như <code>flaky_regression</code>): trung bình vẫn cao (<code>0.80</code>), <code>pass@5 = 1.00</code>, nhưng <strong><code>pass^5</code> rơi thẳng về <code>0.00</code></strong>! Đó là lý do <code>pass^5</code> bắt agent chập chờn cực nhạy.',
+      3: 'Lỗi 2/5 seed: trung bình <code>0.60</code>, <code>pass@5</code> vẫn <code>1.00</code>, còn <code>pass^5 = 0.00</code>.',
+      2: 'Chỉ đúng 2/5 seed: <code>pass@5</code> vẫn đánh lừa là <code>1.00</code> (vì có ít nhất 1 lần đúng), nhưng agent hoàn toàn không đáng tin.',
+      1: 'Đúng đúng 1/5 seed: <code>pass@5 = 1.00</code> nhưng <code>pass^5 = 0.00</code>.',
+      0: 'Sai cả 5/5 seed: toàn bộ chỉ số đều bằng <strong>0.00</strong>.'
+    };
+    cExplain.innerHTML = notes[c];
+  }
+  cSlider.addEventListener('input', updatePassK);
+  updatePassK();
+
+  // ===== Slide 9: Interactive Traps =====
+  const trapsData = {
+    nan: `<h3>Trap 1: <code>evaluator_errors_as_nan</code></h3>
+      <p style="font-size:14px; color:var(--ink-soft);"><strong>Cách gian lận:</strong> Biến các ô fail thành <code>None</code> ("coi như grader bị crash") rồi bỏ qua khi tính trung bình, hoặc để metric thành <code>NaN</code>. Trong Python, <code>NaN &lt; 0.85</code> trả về <code>False</code> nên gate ngây thơ cho qua!</p>
+      <div class="callout ok"><strong>Cách <code>gate.py</code> chặn:</strong> Kiểm tra <code>math.isnan / isinf</code> và <code>None</code> trên cả <code>metrics</code> lẫn từng ô trong <code>rows</code> → <span class="pill bad">exit 1 · INTEGRITY</span></div>`,
+    drop: `<h3>Trap 2: <code>dropped_failing_rows</code></h3>
+      <p style="font-size:14px; color:var(--ink-soft);"><strong>Cách gian lận:</strong> Xóa thẳng các dòng fail khỏi <code>rows</code> rồi tính lại trung bình — điểm lập tức nhảy lên <code>1.0000</code>!</p>
+      <div class="callout ok"><strong>Cách <code>gate.py</code> chặn:</strong> Đối chiếu số dòng với <code>manifest (items × seeds)</code> và đối chiếu chính xác tập khóa <code>(item_id, seed)</code> của PR với <code>baseline</code> → <span class="pill bad">exit 1 · INTEGRITY</span></div>`,
+    seed: `<h3>Trap 3: <code>cherry_picked_seeds</code></h3>
+      <p style="font-size:14px; color:var(--ink-soft);"><strong>Cách gian lận:</strong> Chỉ giữ lại các seed chạy đẹp (ví dụ bỏ seed lẻ bị lỗi), đồng thời sửa luôn <code>manifest.seeds</code> cho khớp số dòng.</p>
+      <div class="callout ok"><strong>Cách <code>gate.py</code> chặn:</strong> Tập <code>(item_id, seed)</code> của PR không trùng khớp với <code>baseline</code> → <span class="pill bad">exit 1 · INTEGRITY</span></div>`,
+    loose: `<h3>Trap 4: <code>loosened_spec</code> (Lách ngưỡng)</h3>
+      <p style="font-size:14px; color:var(--ink-soft);"><strong>Cách gian lận:</strong> Trong cùng PR, âm thầm hạ ngưỡng <code>min</code> xuống 0.3, bỏ <code>no_significant_drop</code>, hoặc xóa sạch <code>slices: []</code> để build chuyển xanh.</p>
+      <div class="callout ok"><strong>Cách <code>gate.py</code> chặn:</strong> Nguyên tắc <strong>Ratchet</strong> (<code>--base-spec</code>): trên cùng <code>eval_set_sha</code> / <code>eval_set_version</code>, cấm xóa metric/slice, cấm tắt <code>blocking</code>, cấm hạ <code>min</code> hay tăng <code>max</code> → <span class="pill bad">exit 1 · INTEGRITY</span></div>`,
+    hidden: `<h3>Trap 5: Các trap ẩn nâng cao đã bọc lót</h3>
+      <ul style="font-size:13.5px; color:var(--ink-soft); padding-left:18px; margin:6px 0;">
+        <li><strong>Nhân bản dòng pass (<code>duplicate_rows</code>):</strong> xóa dòng fail và copy dòng pass cho đủ số lượng → bị bắt bởi kiểm tra trùng <code>(item_id, seed)</code>.</li>
+        <li><strong><code>evaluator_failures</code> trên run xanh:</strong> có lỗi grader nhưng vẫn trả điểm cao → bị chặn ngay.</li>
+        <li><strong>Sửa tay <code>metrics</code> lệch <code>rows</code>:</strong> <code>_check_metrics_match_rows</code> tự tính lại từ <code>rows</code> để đối chiếu.</li>
+        <li><strong>Đổi <code>eval_set_version</code> trên cùng <code>eval_set_sha</code> / sửa tag <code>slices</code>:</strong> đều bị chặn với lý do <code>INTEGRITY</code>.</li>
+      </ul>`
+  };
+  const trapDetail = document.getElementById('trapDetail');
+  function renderTrap(k) { trapDetail.innerHTML = trapsData[k]; }
+  renderTrap('nan');
+  document.querySelectorAll('#trapTabs .tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#trapTabs .tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderTrap(btn.dataset.trap);
+    });
+  });
+})();
+</script>
+</body>
+</html>
