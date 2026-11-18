@@ -3,11 +3,11 @@
 Card này đi kèm mỗi báo cáo và được dùng lại ở Day 10.
 
 - **Run ID / eval set SHA:**
-  - Baseline (`swarm`): `E-swarm-20261118-d326` (`src/reports/baseline_v1.json`)
-  - PR pass (`fixed`): `E-fixed-20261118-d326` (`src/reports/eval_fixed.json`)
-  - PR regression (`seeded_regression`): `E-seeded_regression-20261118-d326` (`src/reports/eval_seeded_regression.json`)
-  - Eval set v1 SHA: `d3260d028c0f`
-- **Phiên bản:** eval set `v1` (`sha d3260d028c0f`) · `metric_spec_version: "1.0"` (`src/config/metric_spec.yaml`) · harness `pydantic-evals` (`lab9.eval`) · seeds `11 / 22 / 33 / 44 / 55` · LLM `MockLLM`
+  - Baseline (`swarm`): `E-swarm-20261118-051d` (`src/reports/baseline_v1.json`)
+  - PR pass (`fixed`): `E-fixed-20261118-051d` (`src/reports/eval_fixed.json`)
+  - PR regression (`seeded_regression`): `E-seeded_regression-20261118-051d` (`src/reports/eval_seeded_regression.json`)
+  - Eval set v1 SHA: `051d3c70cc2c`
+- **Phiên bản:** eval set `v1` (`sha 051d3c70cc2c`) · `metric_spec_version: "1.0"` (`src/config/metric_spec.yaml`) · harness `pydantic-evals` (`lab9.eval`) · seeds `11 / 22 / 33 / 44 / 55` · LLM `MockLLM`
 - **Eval set:** v1, 14 item × 5 seed (= 70 trial), nguồn `lab8_public`; item: `src/data/eval/eval_set_v1.jsonl`, nhãn tách riêng: `src/data/eval/labels_v1.json`
 - **Metric & ngưỡng (trích `config/metric_spec.yaml`):**
   - An toàn (blocking): `approval_bypass` (`max: 0`), `secret_leak` (`max: 0`).
@@ -43,8 +43,8 @@ Card này đi kèm mỗi báo cáo và được dùng lại ở Day 10.
 ## Eval card v2 — Advanced / Expert (M5–M7)
 
 - **Run ID / eval set v2 SHA:**
-  - Baseline v2 (`swarm`): `E-swarm-20261118-ca44` (`src/reports/baseline_v2.json`)
-  - Eval set v2 SHA: `ca441814e497` (`28 item × 5 seed = 140 trial` = 14 item v1 + 14 item adversarial trong `src/data/eval/adversarial_v2.json`)
+  - Baseline v2 (`swarm`): `E-swarm-20261118-27c5` (`src/reports/baseline_v2.json`)
+  - Eval set v2 SHA: `27c5f18440a9` (`28 item × 5 seed = 140 trial` = 14 item v1 + 14 item adversarial trong `src/data/eval/adversarial_v2.json`)
   - Spec: `metric_spec_version: "2.0"` (`src/config/metric_spec_v2.yaml`), ánh xạ cơ chế tấn công → mã FM tại `src/config/fm_map.yaml` (`evalset --v2` = `0 problem(s)`, mọi FM bị tấn công đều có ≥ 3 item).
 - **Nhiễu A/A & cách chọn ngưỡng `pass_hat_5` (M6):**
   - Chạy A/A cùng agent `swarm` trên 2 bộ seed (`11,22,33,44,55` vs `66,77,88,99,110`): mọi metric cho **`Δ = +0.0000`** (`pass_rate = 0.9786`, `pass_hat_5 = 0.8929`, `reply_ledger_match = 1.0`).
